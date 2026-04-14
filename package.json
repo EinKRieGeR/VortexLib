@@ -1,0 +1,32 @@
+{
+  "name": "vortexlib",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@vueuse/core": "^14.2.1",
+    "@vueuse/nuxt": "^14.2.1",
+    "adm-zip": "^0.5.17",
+    "better-sqlite3": "^12.9.0",
+    "cheerio": "^1.2.0",
+    "drizzle-orm": "^0.45.2",
+    "iconv-lite": "^0.7.2",
+    "nuxt": "^4.4.2",
+    "vue": "^3.5.32",
+    "vue-router": "^5.0.4",
+    "yauzl": "^3.3.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/iconv-lite": "^0.0.1",
+    "@types/yauzl": "^2.10.3",
+    "drizzle-kit": "^0.31.10"
+  }
+}
