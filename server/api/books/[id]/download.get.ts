@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   if (!book) {
     throw createError({ statusCode: 404, statusMessage: 'Book not found' })
   }
-  const archivePath = join(libraryPath, book.archive_name)
+  const archivePath = join(libraryPath, book.folder || '', book.archive_name)
   if (!existsSync(archivePath)) {
     throw createError({ statusCode: 404, statusMessage: 'Archive not found: ' + book.archive_name })
   }

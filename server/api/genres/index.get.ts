@@ -1,21 +1,31 @@
 import { getDb } from '../../utils/db'
+import { getImportInProgress } from '../../utils/state'
 
-export default defineEventHandler(async () => {
+export default defineCachedEventHandler(async () => {
   const db = getDb()
 
   const genres = db.prepare(`
-    SELECT g.*, COUNT(bg.book_id) as book_count
+    SELECT g.code, g.name
     FROM genres g
-    LEFT JOIN book_genres bg ON bg.genre_id = g.id
-    GROUP BY g.id
-    ORDER BY book_count DESC
+    ORDER BY g.name ASC
   `).all() as any[]
 
   return {
     genres: genres.map(g => ({
       code: g.code,
       name: g.name,
-      bookCount: g.book_count,
     })),
   }
+}, {
+  maxAge: 60 * 30,
+  name: 'genres-list',
+  getKey: () => 'all',
+
+  shouldBypassCache: async () => {
+    const db = getDb()
+    const count = (db.prepare('SELECT count(*) as c FROM genres').get() as any).c
+    if (count === 0) return true
+    const inProgress = await getImportInProgress()
+    return !!inProgress
+  },
 })

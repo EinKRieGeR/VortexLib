@@ -11,7 +11,7 @@
           <NuxtLink to="/">Каталог</NuxtLink>
           <NuxtLink to="/authors">Авторы</NuxtLink>
           <NuxtLink to="/genres">Жанры</NuxtLink>
-          <NuxtLink to="/settings">Настройки</NuxtLink>
+          <NuxtLink v-if="user?.role === 'admin'" to="/settings">Настройки</NuxtLink>
         </nav>
 
         <div class="header-search">
@@ -40,6 +40,21 @@
             <span class="stat-value">{{ formatNumber(stats.totalGenres) }}</span>
           </div>
         </div>
+        
+        <div class="header-auth" style="display: flex; align-items: center; gap: 16px; margin-left: 20px;">
+          <template v-if="isLoaded">
+            <template v-if="user">
+              <div class="user-badge" style="display: flex; align-items: center; gap: 8px;">
+                <span class="user-role" :class="user.role">{{ user.role === 'admin' ? '👑' : (user.role === 'moderator' ? '🛡️' : '👤') }}</span>
+                <span style="font-weight: 600; font-size: 0.875rem;">{{ user.username }}</span>
+              </div>
+              <button @click="doLogout" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.75rem;">Выход</button>
+            </template>
+            <template v-else>
+              <NuxtLink to="/login" class="btn btn-primary" style="padding: 6px 16px; font-size: 0.875rem;">Войти</NuxtLink>
+            </template>
+          </template>
+        </div>
       </div>
     </header>
 
@@ -53,11 +68,38 @@
 const searchQuery = ref('')
 const router = useRouter()
 const route = useRoute()
+const { user, isLoaded, fetchUser, logout } = useAuth()
 
-const { data: stats } = await useFetch('/api/stats', {
+onMounted(() => {
+  fetchUser()
+})
+
+async function doLogout() {
+  await logout()
+  router.push('/login')
+}
+
+const { data: stats, refresh: refreshStats } = useFetch('/api/stats', {
   lazy: true,
   server: false,
 })
+
+// Auto-refresh stats every 5s while import is running
+let statsInterval: ReturnType<typeof setInterval> | null = null
+watch(() => stats.value?.importStatus?.status, (status) => {
+  if (status === 'running' || status === 'pending') {
+    if (!statsInterval) {
+      statsInterval = setInterval(() => refreshStats(), 5000)
+    }
+  } else {
+    if (statsInterval) {
+      clearInterval(statsInterval)
+      statsInterval = null
+    }
+  }
+})
+onUnmounted(() => { if (statsInterval) clearInterval(statsInterval) })
+
 watch(() => route.query.q, (q) => {
   searchQuery.value = (q as string) || ''
 }, { immediate: true })

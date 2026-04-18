@@ -5,7 +5,7 @@ import { Writable, PassThrough } from 'stream'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { existsSync, mkdirSync, createWriteStream, readFileSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, relative, dirname } from 'path'
 import { getDb } from './db'
 import { getGenreName } from './genres'
 
@@ -75,27 +75,31 @@ function parseLine(line: string, archiveName: string): ParsedBook | null {
   }
 }
 
-export async function importInpx(inpxPath: string, chunkSize: number = 5000, progressCallback?: (msg: string, progress: number) => void): Promise<{ total: number; imported: number }> {
+export async function importLibrary(libraryPath: string, chunkSize: number = 5000, progressCallback?: (msg: string, progress: number) => void): Promise<{ total: number; imported: number }> {
   const db = getDb()
   const tmpDir = join(process.cwd(), 'data', 'tmp_inpx')
   if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true })
 
-  progressCallback?.('Распаковка INPX файла...', 0)
+  progressCallback?.('Поиск файлов индексаграфии (INPX)...', 0)
+  
+  let inpxFiles: string[] = []
   try {
-    await execAsync(`unzip -o "${inpxPath}" -d "${tmpDir}"`, { maxBuffer: 50 * 1024 * 1024 })
+    const { stdout } = await execAsync(`find "${libraryPath}" -name "*.inpx" -type f`)
+    inpxFiles = stdout.trim().split('\n').filter(Boolean)
   } catch (e: any) {
-    console.error('Error extracting INPX:', e.message)
-    throw new Error('Не удалось распаковать INPX файл')
+    console.warn('Error during find for INPX:', e.message)
   }
-  const { stdout } = await execAsync(`find "${tmpDir}" -name "*.inp" -type f`)
-  const inpFiles = stdout.trim().split('\n').filter(Boolean)
+  
+  if (inpxFiles.length === 0) {
+    throw new Error(`В директории ${libraryPath} не найдено .inpx файлов`)
+  }
 
-  progressCallback?.(`Найдено ${inpFiles.length} файлов индекса`, 5)
   let totalImported = 0
   let totalParsed = 0
+  
   const insertBook = db.prepare(`
-    INSERT OR REPLACE INTO books (id, lib_id, title, series, series_num, file_size, format, date_added, lang, deleted, keywords, archive_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO books (id, lib_id, title, series, series_num, file_size, format, date_added, lang, deleted, keywords, archive_name, folder)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
 
   const insertAuthor = db.prepare(`
@@ -130,83 +134,101 @@ export async function importInpx(inpxPath: string, chunkSize: number = 5000, pro
     INSERT OR REPLACE INTO books_fts (rowid, title, authors, series)
     VALUES (?, ?, ?, ?)
   `)
-  for (let fileIdx = 0; fileIdx < inpFiles.length; fileIdx++) {
-    const inpFile = inpFiles[fileIdx] || ''
-    const archiveName = basename(inpFile, '.inp') + '.zip'
-    const content = readFileSync(inpFile as string, 'utf-8')
-    const lines = content.split('\n').filter(l => l.trim())
-
-    const batchSize = chunkSize
-    for (let i = 0; i < lines.length; i += batchSize) {
-      await new Promise(resolve => setTimeout(resolve, 5))
-
-      const batch = lines.slice(i, i + batchSize)
-
-      const insertBatch = db.transaction((books: ParsedBook[]) => {
-        for (const book of books) {
-          try {
-            insertBook.run(
-              book.bookId,
-              book.libId,
-              book.title,
-              book.series || null,
-              book.seriesNum || null,
-              book.fileSize,
-              book.format,
-              book.dateAdded || null,
-              book.lang,
-              book.deleted ? 1 : 0,
-              book.keywords || null,
-              book.archiveName,
-            )
-            const authorNames: string[] = []
-            for (const author of book.authors) {
-              insertAuthor.run(author.lastName, author.firstName || '', author.middleName || '')
-              const row = getAuthorId.get(author.lastName, author.firstName || '', author.middleName || '') as any
-              if (row) {
-                insertBookAuthor.run(book.bookId, row.id)
-              }
-              const fullName = [author.lastName, author.firstName, author.middleName].filter(Boolean).join(' ')
-              authorNames.push(fullName)
-            }
-            for (const genreCode of book.genres) {
-              const genreName = getGenreName(genreCode)
-              insertGenre.run(genreCode, genreName)
-              const row = getGenreId.get(genreCode) as any
-              if (row) {
-                insertBookGenre.run(book.bookId, row.id)
-              }
-            }
-            insertFts.run(
-              book.bookId,
-              book.title,
-              authorNames.join(', '),
-              book.series || '',
-            )
-
-            totalImported++
-          } catch (e: any) {
-            if (!e.message?.includes('UNIQUE constraint')) {
-            }
-          }
-        }
-      })
-
-      const parsedBooks: ParsedBook[] = []
-      for (const line of batch) {
-        const book = parseLine(line.replace(/\r$/, ''), archiveName)
-        if (book) {
-          parsedBooks.push(book)
-          totalParsed++
-        }
-      }
-
-      insertBatch(parsedBooks)
+  for (let inpxIdx = 0; inpxIdx < inpxFiles.length; inpxIdx++) {
+    const inpxPath = inpxFiles[inpxIdx] as string
+    const relativeFolder = relative(libraryPath, dirname(inpxPath)) || ''
+    
+    // Unzip this specific INPX to a clean tmp dir
+    await execAsync(`rm -rf "${tmpDir}"/*`).catch(() => {})
+    try {
+      await execAsync(`unzip -o "${inpxPath}" -d "${tmpDir}"`, { maxBuffer: 50 * 1024 * 1024 })
+    } catch (e: any) {
+      console.warn(`Error extracting INPX ${inpxPath}:`, e.message)
+      continue
     }
 
-    const progress = 5 + ((fileIdx + 1) / inpFiles.length) * 95
-    progressCallback?.(`Импортировано ${totalImported} книг из ${fileIdx + 1}/${inpFiles.length} файлов`, Math.round(progress))
+    const { stdout } = await execAsync(`find "${tmpDir}" -name "*.inp" -type f`)
+    const inpFiles = stdout.trim().split('\n').filter(Boolean)
+
+    for (let fileIdx = 0; fileIdx < inpFiles.length; fileIdx++) {
+      const inpFile = inpFiles[fileIdx] || ''
+      const archiveName = basename(inpFile, '.inp') + '.zip'
+      const content = readFileSync(inpFile as string, 'utf-8')
+      const lines = content.split('\n').filter(l => l.trim())
+
+      const batchSize = chunkSize
+      for (let i = 0; i < lines.length; i += batchSize) {
+        await new Promise(resolve => setTimeout(resolve, 5))
+
+        const batch = lines.slice(i, i + batchSize)
+
+        const insertBatch = db.transaction((books: ParsedBook[]) => {
+          for (const book of books) {
+            try {
+              insertBook.run(
+                book.bookId,
+                book.libId,
+                book.title,
+                book.series || null,
+                book.seriesNum || null,
+                book.fileSize,
+                book.format,
+                book.dateAdded || null,
+                book.lang,
+                book.deleted ? 1 : 0,
+                book.keywords || null,
+                book.archiveName,
+                relativeFolder
+              )
+              const authorNames: string[] = []
+              for (const author of book.authors) {
+                insertAuthor.run(author.lastName, author.firstName || '', author.middleName || '')
+                const row = getAuthorId.get(author.lastName, author.firstName || '', author.middleName || '') as any
+                if (row) {
+                  insertBookAuthor.run(book.bookId, row.id)
+                }
+                const fullName = [author.lastName, author.firstName, author.middleName].filter(Boolean).join(' ')
+                authorNames.push(fullName)
+              }
+              for (const genreCode of book.genres) {
+                const genreName = getGenreName(genreCode)
+                insertGenre.run(genreCode, genreName)
+                const row = getGenreId.get(genreCode) as any
+                if (row) {
+                  insertBookGenre.run(book.bookId, row.id)
+                }
+              }
+              insertFts.run(
+                book.bookId,
+                book.title,
+                authorNames.join(', '),
+                book.series || '',
+              )
+
+              totalImported++
+            } catch (e: any) {
+              
+            }
+          }
+        })
+
+        const parsedBooks: ParsedBook[] = []
+        for (const line of batch) {
+          const book = parseLine(line.replace(/\r$/, ''), archiveName)
+          if (book) {
+            parsedBooks.push(book)
+            totalParsed++
+          }
+        }
+
+        insertBatch(parsedBooks)
+      }
+
+      const overallProgress = (inpxIdx / inpxFiles.length) * 100 + ((fileIdx + 1) / inpFiles.length) * (100 / inpxFiles.length)
+      progressCallback?.(`Импортировано ${totalImported} (${inpxIdx + 1}/${inpxFiles.length} INPX)`, Math.round(overallProgress))
+    }
   }
+
   db.prepare(`
     INSERT OR REPLACE INTO import_status (id, total_books, imported_at, status)
     VALUES (1, ?, CURRENT_TIMESTAMP, 'done')

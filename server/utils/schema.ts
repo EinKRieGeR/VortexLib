@@ -13,6 +13,7 @@ export const books = sqliteTable('books', {
   deleted: integer('deleted').notNull().default(0),
   keywords: text('keywords'),
   archiveName: text('archive_name').notNull(),
+  folder: text('folder').default(''),
   createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
 })
 
@@ -49,4 +50,18 @@ export const importStatus = sqliteTable('import_status', {
 export const appSettings = sqliteTable('app_settings', {
   id: integer('id').primaryKey(),
   libraryPath: text('library_path').notNull().default(''),
+})
+
+export const users = sqliteTable('users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').notNull().default('user'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+})
+
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  expiresAt: integer('expires_at').notNull(),
 })

@@ -1,18 +1,26 @@
-import { BackgroundState } from '../utils/state'
 import { clearDb, getDb, getLibraryPath } from '../utils/db'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { requireRole } from '../utils/auth'
+import {
+  getImportInProgress,
+  getImportProgress,
+} from '../utils/state'
 
 export default defineEventHandler(async (event) => {
+  requireRole(event, ['admin'])
   const method = getMethod(event)
   const query = getQuery(event)
 
   if (method === 'GET') {
     const db = getDb()
     const status = db.prepare('SELECT * FROM import_status WHERE id = 1').get() as any
+
+    const inProgress = await getImportInProgress()
+    const progress = await getImportProgress()
+
     return {
-      inProgress: BackgroundState.importInProgress,
-      progress: BackgroundState.importProgress,
+      inProgress,
+      progress,
       status: status || { status: 'not_imported', total_books: 0 },
     }
   }
@@ -20,27 +28,37 @@ export default defineEventHandler(async (event) => {
   if (method === 'POST') {
     const action = (query.action as string) || 'import'
 
-    if (BackgroundState.importInProgress) {
-      return { error: 'Импорт уже выполняется', progress: BackgroundState.importProgress }
+    const inProgress = await getImportInProgress()
+    if (inProgress) {
+      const progress = await getImportProgress()
+      return { error: 'Импорт уже выполняется', progress }
     }
 
     if (action === 'clear') {
       clearDb()
-      return { success: true, message: 'Библиотека очищена' }
+
+      const cache = useStorage('cache')
+      const cacheKeys = await cache.getKeys()
+      await Promise.all(cacheKeys.map(k => cache.removeItem(k)))
+
+      const mem = useStorage('memory')
+      const memKeys = await mem.getKeys()
+      await Promise.all(memKeys.map(k => mem.removeItem(k)))
+
+      return { success: true, message: 'Библиотека полностью очищена' }
     }
 
     const libraryPath = getLibraryPath()
     if (!libraryPath) {
-      throw createError({ statusCode: 400, message: 'Library path not configured in settings.' })
+      throw createError({ statusCode: 400, message: 'Путь к библиотеке не настроен.' })
     }
-    const inpxPath = join(libraryPath, 'flibusta_fb2_local.inpx')
 
-    if (!existsSync(inpxPath)) {
-      throw createError({ statusCode: 404, statusMessage: 'INPX файл не найден: ' + inpxPath })
+    if (!existsSync(libraryPath)) {
+      throw createError({ statusCode: 404, statusMessage: 'Папка библиотеки не найдена: ' + libraryPath })
     }
 
     const chunkSize = parseInt(query.chunkSize as string) || 5000
-    runTask('library:import', { payload: { inpxPath, chunkSize } })
+    runTask('library:import', { payload: { libraryPath, chunkSize } })
 
     return { started: true, message: 'Импорт запущен' }
   }

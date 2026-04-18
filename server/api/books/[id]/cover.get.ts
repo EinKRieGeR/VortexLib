@@ -42,12 +42,12 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, message: 'Invalid ID' })
   
   const db = getDb()
-  const book = db.prepare('SELECT archive_name FROM books WHERE id = ?').get(id) as any
+  const book = db.prepare('SELECT archive_name, folder FROM books WHERE id = ?').get(id) as any
   if (!book) throw createError({ statusCode: 404, message: 'Book not found' })
 
   const libraryPath = getLibraryPath()
   if (!libraryPath) throw createError({ statusCode: 400, message: 'Library path not configured' })
-  const zipPath = join(libraryPath, book.archive_name)
+  const zipPath = join(libraryPath, book.folder || '', book.archive_name)
 
   if (!existsSync(zipPath)) throw createError({ statusCode: 404, message: 'Archive not found' })
 

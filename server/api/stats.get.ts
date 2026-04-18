@@ -1,31 +1,46 @@
-import { getDrizzle } from '../utils/db'
-import { books, authors, genres, importStatus } from '../utils/schema'
-import { count, sql, eq } from 'drizzle-orm'
+import { getDb } from '../utils/db'
+import { getImportInProgress } from '../utils/state'
 
 export default defineEventHandler(async () => {
-  const db = getDrizzle()
+  const db = getDb()
 
-  const [booksRes] = await db.select({ c: count() }).from(books).where(eq(books.deleted, 0))
-  const [authorsRes] = await db.select({ c: count() }).from(authors)
-  const [genresRes] = await db.select({ c: count() }).from(genres)
+  const inProgress = await getImportInProgress()
 
-  const langStats = await db.select({
-    lang: books.lang,
-    count: count()
-  }).from(books).where(eq(books.deleted, 0)).groupBy(books.lang).orderBy(sql`${count()} DESC`).limit(10)
+  const cacheKey = 'library-stats'
+  const storage = useStorage('cache')
 
-  const [statusRes] = await db.select().from(importStatus).where(eq(importStatus.id, 1))
+  if (!inProgress) {
+    const cached = await storage.getItem(cacheKey)
+    if (cached) {
+      const statusRow = db.prepare('SELECT * FROM import_status WHERE id = 1').get() as any
+      return {
+        ...(cached as object),
+        importStatus: statusRow || { status: 'not_imported', total_books: 0 },
+      }
+    }
+  }
 
+  const totalBooks = (db.prepare('SELECT count(*) as c FROM books WHERE deleted = 0').get() as any).c
+  const totalAuthors = (db.prepare('SELECT count(*) as c FROM authors').get() as any).c
+  const totalGenres = (db.prepare('SELECT count(*) as c FROM genres').get() as any).c
+  const langStats = db.prepare(`
+    SELECT lang, count(*) as count
+    FROM books
+    WHERE deleted = 0
+    GROUP BY lang
+    ORDER BY count DESC
+    LIMIT 10
+  `).all()
+
+  const stats = { totalBooks, totalAuthors, totalGenres, langStats }
+
+  if (!inProgress) {
+    await storage.setItem(cacheKey, stats, { ttl: 60 * 15 })
+  }
+
+  const statusRow = db.prepare('SELECT * FROM import_status WHERE id = 1').get() as any
   return {
-    totalBooks: booksRes?.c || 0,
-    totalAuthors: authorsRes?.c || 0,
-    totalGenres: genresRes?.c || 0,
-    langStats,
-    importStatus: statusRes ? {
-      id: statusRes.id,
-      total_books: statusRes.totalBooks,
-      imported_at: statusRes.importedAt,
-      status: statusRes.status
-    } : { status: 'not_imported', total_books: 0 },
+    ...stats,
+    importStatus: statusRow || { status: 'not_imported', total_books: 0 },
   }
 })

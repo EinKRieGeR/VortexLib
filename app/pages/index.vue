@@ -1,9 +1,32 @@
 <template>
   <div class="page-container">
     
-    <div v-if="statsPending" class="loading-container" style="min-height: 50vh;">
-      <div class="spinner"></div>
-      <p>Проверка состояния библиотеки...</p>
+    <div v-if="statsPending" class="loading-container" style="min-height: 60vh;">
+      <div class="spinner-container">
+        <div class="spinner"></div>
+        <div class="spinner-core">🌌</div>
+      </div>
+      <div class="loading-details fade-in">
+        <h2 class="loading-title">Инициализация VortexLib</h2>
+        <div class="loading-steps">
+          <div class="step" :class="{ active: statsPending }">
+            <span class="step-icon">🔌</span>
+            <span class="step-text">Подключение к SQLite...</span>
+            <span class="step-status">OK</span>
+          </div>
+          <div class="step" :class="{ active: statsPending }">
+            <span class="step-icon">📖</span>
+            <span class="step-text">Актуализация каталога...</span>
+            <span class="step-status pulse">RUNNING</span>
+          </div>
+          <div class="step">
+            <span class="step-icon">👤</span>
+            <span class="step-text">Синхронизация авторов и серий...</span>
+            <span class="step-status">WAIT</span>
+          </div>
+        </div>
+        <p class="loading-hint">Это займет всего пару мгновений</p>
+      </div>
     </div>
 
     
@@ -261,3 +284,91 @@ onUnmounted(() => {
   if (importPollTimer) clearInterval(importPollTimer)
 })
 </script>
+
+<style scoped>
+.spinner-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.spinner-core {
+  position: absolute;
+  font-size: 1.5rem;
+  animation: pulse-core 2s infinite ease-in-out;
+}
+
+@keyframes pulse-core {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.loading-details {
+  text-align: center;
+  max-width: 400px;
+}
+
+.loading-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  background: linear-gradient(90deg, var(--text-primary), var(--accent-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.loading-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+  transition: all 0.3s;
+}
+
+.step.active {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.step-icon { font-size: 1.125rem; }
+.step-text { flex: 1; text-align: left; }
+
+.step-status {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.step-status.pulse {
+  color: var(--accent-primary);
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0.3; }
+}
+
+.loading-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+</style>

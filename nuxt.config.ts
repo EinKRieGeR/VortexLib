@@ -1,6 +1,7 @@
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
+  ssr: false,
   devtools: { enabled: true },
   modules: ['@vueuse/nuxt'],
 
@@ -51,6 +52,10 @@ export default defineNuxtConfig({
       'library:import': {
         handler: './server/tasks/import.ts'
       }
+    },
+    // Do not bundle native modules — they must be loaded from node_modules at runtime
+    externals: {
+      external: ['better-sqlite3'],
     }
   },
 
