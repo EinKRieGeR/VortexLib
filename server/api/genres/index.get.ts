@@ -1,7 +1,6 @@
 import { getDb } from '../../utils/db'
-import { getImportInProgress } from '../../utils/state'
 
-export default defineCachedEventHandler(async () => {
+export default defineEventHandler(async () => {
   const db = getDb()
 
   const genres = db.prepare(`
@@ -16,16 +15,4 @@ export default defineCachedEventHandler(async () => {
       name: g.name,
     })),
   }
-}, {
-  maxAge: 60 * 30,
-  name: 'genres-list',
-  getKey: () => 'all',
-
-  shouldBypassCache: async () => {
-    const db = getDb()
-    const count = (db.prepare('SELECT count(*) as c FROM genres').get() as any).c
-    if (count === 0) return true
-    const inProgress = await getImportInProgress()
-    return !!inProgress
-  },
 })
