@@ -96,7 +96,8 @@ export function clearDb() {
       tx.delete(schema.authors).run()
       tx.delete(schema.genres).run()
 
-      db.exec('DELETE FROM books_fts')
+      db.exec('DROP TABLE IF EXISTS books_fts')
+      _createFtsTable(db)
 
       tx.update(schema.importStatus)
         .set({

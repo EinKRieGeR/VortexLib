@@ -105,7 +105,6 @@ function parseLine(line, archiveName) {
   const bookId = parseInt(fields[5] || '') || 0
   if (!title || !bookId) return null
 
-  // Skip deleted books
   const deleted = fields[8] === '1'
   if (deleted) return null
 
@@ -140,29 +139,36 @@ async function run() {
   const { libraryPath, chunkSize = 5000, dbPath } = workerData
 
   const db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('synchronous = NORMAL')
-  db.pragma('cache_size = -64000')
-  db.pragma('foreign_keys = ON')
+  db.exec('PRAGMA journal_mode = WAL')
+  db.exec('PRAGMA synchronous = OFF')
+  db.exec('PRAGMA cache_size = -128000')
+  db.exec('PRAGMA foreign_keys = OFF')
 
-  const tmpDir = join(process.cwd(), 'data', 'tmp_inpx')
+  const tmpDir = process.env.DOCKERIZED === 'true'
+    ? '/tmp/vortex_import'
+    : join(process.cwd(), 'data', 'tmp_inpx')
+
   if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true })
 
   progress('Поиск файлов индексации (INPX)...', 0)
+  console.log(`[worker] Starting scan in: ${libraryPath}`)
 
   let inpxFiles = []
   try {
     const { stdout } = await execAsync(`find "${libraryPath}" -name "*.inpx" -type f`)
     inpxFiles = stdout.trim().split('\n').filter(Boolean)
   } catch (e) {
+    console.error('[worker] Find error:', e)
     throw new Error(`Ошибка поиска INPX: ${e.message}`)
   }
 
   if (inpxFiles.length === 0) {
+    console.warn(`[worker] No INPX files found in ${libraryPath}`)
     throw new Error(`В директории ${libraryPath} не найдено .inpx файлов`)
   }
 
   const totalBooks = (db.prepare('SELECT count(*) as c FROM books').get()).c
+  console.log(`[worker] Found ${inpxFiles.length} INPX files. Existing books: ${totalBooks}`)
   progress(`Найдено ${inpxFiles.length} INPX файлов. Уже в базе: ${totalBooks} книг`, 1)
 
   db.exec(`
@@ -194,16 +200,20 @@ async function run() {
     const inpxPath = inpxFiles[inpxIdx]
     const relativeFolder = relative(libraryPath, dirname(inpxPath)) || ''
 
+    console.log(`[worker] Processing archive: ${basename(inpxPath)}`)
+
     await execAsync(`rm -rf "${tmpDir}"/*`).catch(() => { })
     try {
-      await execAsync(`unzip -o "${inpxPath}" -d "${tmpDir}"`, { maxBuffer: 50 * 1024 * 1024 })
+      await execAsync(`unzip -o "${inpxPath}" -d "${tmpDir}"`, { maxBuffer: 100 * 1024 * 1024 })
     } catch (e) {
-      console.warn(`[worker] Error extracting ${inpxPath}:`, e.message)
+      console.error(`[worker] Unzip error (${basename(inpxPath)}):`, e.message)
       continue
     }
 
     const { stdout } = await execAsync(`find "${tmpDir}" -name "*.inp" -type f`)
     const inpFiles = stdout.trim().split('\n').filter(Boolean)
+
+    console.log(`[worker] Found ${inpFiles.length} INP files in ${basename(inpxPath)}`)
 
     for (let fileIdx = 0; fileIdx < inpFiles.length; fileIdx++) {
       const inpFile = inpFiles[fileIdx] || ''

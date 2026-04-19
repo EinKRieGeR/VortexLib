@@ -1,9 +1,13 @@
 import { Worker } from 'node:worker_threads'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   setImportInProgress,
   setImportProgress,
 } from '../utils/state'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineTask({
   meta: {
@@ -18,6 +22,10 @@ export default defineTask({
     await setImportProgress({ message: 'Запуск рабочего потока...', progress: 0 })
 
     try {
+      if (!existsSync(libraryPath)) {
+        throw new Error(`Путь библиотеки '${libraryPath}' не найден! Проверьте монтирование в Docker.`)
+      }
+
       await runInWorker({
         libraryPath,
         chunkSize: chunkSize || 5000,
@@ -45,7 +53,11 @@ export default defineTask({
  */
 function runInWorker(workerData: Record<string, unknown>): Promise<void> {
   return new Promise((resolve_p, reject) => {
-    const workerPath = resolve(process.cwd(), 'server/workers/import.worker.mjs')
+    let workerPath = resolve(__dirname, '../workers/import.worker.mjs')
+
+    if (!existsSync(workerPath)) {
+      workerPath = resolve(process.cwd(), 'server/workers/import.worker.mjs')
+    }
 
     const worker = new Worker(workerPath, { workerData })
 
