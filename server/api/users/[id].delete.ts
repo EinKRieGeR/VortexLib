@@ -2,7 +2,7 @@ import { getDb } from '../../utils/db'
 import { requireRole } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
-  const admin = requireRole(event, ['admin'])
+  const admin = await requireRole(event, ['admin'])
   const id = parseInt(getRouterParam(event, 'id') as string)
 
   if (!id) throw createError({ statusCode: 400, message: 'Invalid ID' })

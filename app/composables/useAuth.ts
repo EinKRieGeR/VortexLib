@@ -1,22 +1,17 @@
 export const useAuth = () => {
-  const user = useState<any>('auth-user', () => null)
-  const isLoaded = useState<boolean>('auth-loaded', () => false)
+  const { user, session, fetch: fetchSession, clear } = useUserSession()
 
-  async function fetchUser() {
-    try {
-      const data: any = await $fetch('/api/auth/me')
-      user.value = data.user
-    } catch {
-      user.value = null
-    } finally {
-      isLoaded.value = true
-    }
-  }
+  const isLoaded = computed(() => user.value !== undefined)
 
   async function logout() {
     await $fetch('/api/auth/logout', { method: 'POST' })
-    user.value = null
+    await clear()
   }
 
-  return { user, isLoaded, fetchUser, logout }
+  return {
+    user,
+    isLoaded,
+    fetchUser: fetchSession,
+    logout,
+  }
 }

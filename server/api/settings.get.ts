@@ -3,7 +3,7 @@ import { appSettings } from '../utils/schema'
 import { requireRole } from '../utils/auth'
 
 export default defineEventHandler(async (event) => {
-  requireRole(event, ['admin'])
+  await requireRole(event, ['admin'])
   const db = getDrizzle()
   const [settings] = await db.select().from(appSettings)
   

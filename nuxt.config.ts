@@ -1,9 +1,9 @@
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  ssr: false,
+  ssr: true,
   devtools: { enabled: true },
-  modules: ['@vueuse/nuxt'],
+  modules: ['@vueuse/nuxt', 'nuxt-auth-utils'],
 
   devServer: {
     port: 4224,
@@ -25,13 +25,13 @@ export default defineNuxtConfig({
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'VortexLib — персональная библиотека книг. Поиск, каталогизация и скачивание.' },
+        { name: 'description', content: 'VortexLib — персональная библиотека книг.' },
         { name: 'theme-color', content: '#0a0a1a' },
       ],
       link: [
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap' },
+        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap' },
       ],
     },
   },
@@ -39,8 +39,21 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
-    libraryPath: '/mnt/raid0/downloads/fb2.Flibusta.Net',
-    dbPath: '/home/einkrieger/Development/vortexlib/data/library.db',
+    public: {
+      isDocker: process.env.DOCKERIZED === 'true'
+    },
+    libraryPath: process.env.NUXT_LIBRARY_PATH || '/mnt/raid0/downloads/fb2.Flibusta.Net',
+    dbPath: process.env.NUXT_DB_PATH || '/home/einkrieger/Development/vortexlib/data/library.db',
+    session: {
+      name: 'vortex-session',
+      password: process.env.NUXT_SESSION_PASSWORD || '',
+      cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7 // 1 week
+      }
+    }
   },
 
   nitro: {
@@ -53,12 +66,8 @@ export default defineNuxtConfig({
         handler: './server/tasks/import.ts'
       }
     },
-    // Do not bundle native modules — they must be loaded from node_modules at runtime
     externals: {
       external: ['better-sqlite3'],
     }
-  },
-
-  routeRules: {
   }
 })

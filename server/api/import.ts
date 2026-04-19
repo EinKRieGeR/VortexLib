@@ -7,7 +7,7 @@ import {
 } from '../utils/state'
 
 export default defineEventHandler(async (event) => {
-  requireRole(event, ['admin'])
+  await requireRole(event, ['admin'])
   const method = getMethod(event)
   const query = getQuery(event)
 

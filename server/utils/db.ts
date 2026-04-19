@@ -49,6 +49,16 @@ export function getDb(): Database.Database {
   const migrationsFolder = resolve('./server/database/migrations')
   migrate(_orm, { migrationsFolder })
 
+  if (process.env.DOCKERIZED === 'true') {
+    _orm.insert(appSettings)
+      .values({ id: 1, libraryPath: '/library' })
+      .onConflictDoUpdate({
+        target: appSettings.id,
+        set: { libraryPath: '/library' }
+      })
+      .run()
+  }
+
   _createFtsTable(_db)
 
   return _db
@@ -73,73 +83,30 @@ function _createFtsTable(db: Database.Database) {
 }
 
 export function clearDb() {
+  const orm = getDrizzle()
   const db = getDb()
 
   db.pragma('foreign_keys = OFF')
 
   try {
-    db.transaction(() => {
-      db.exec('DROP TABLE IF EXISTS book_genres')
-      db.exec('DROP TABLE IF EXISTS book_authors')
-      db.exec('DROP TABLE IF EXISTS books')
-      db.exec('DROP TABLE IF EXISTS authors')
-      db.exec('DROP TABLE IF EXISTS genres')
-      db.exec('DROP TABLE IF EXISTS books_fts')
-      db.exec('DROP TABLE IF EXISTS import_checkpoints')
+    orm.transaction((tx) => {
+      tx.delete(schema.bookGenres).run()
+      tx.delete(schema.bookAuthors).run()
+      tx.delete(schema.books).run()
+      tx.delete(schema.authors).run()
+      tx.delete(schema.genres).run()
 
-      db.exec(`
-        CREATE TABLE books (
-          id INTEGER PRIMARY KEY,
-          lib_id INTEGER,
-          title TEXT NOT NULL,
-          series TEXT,
-          series_num INTEGER,
-          file_size INTEGER,
-          format TEXT,
-          date_added TEXT,
-          lang TEXT,
-          deleted INTEGER DEFAULT 0,
-          keywords TEXT,
-          archive_name TEXT,
-          folder TEXT,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-      `)
-      db.exec(`
-        CREATE TABLE authors (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          last_name TEXT NOT NULL,
-          first_name TEXT DEFAULT '',
-          middle_name TEXT DEFAULT '',
-          UNIQUE(last_name, first_name, middle_name)
-        )
-      `)
-      db.exec(`
-        CREATE TABLE genres (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          code TEXT NOT NULL UNIQUE,
-          name TEXT NOT NULL
-        )
-      `)
-      db.exec(`
-        CREATE TABLE book_authors (
-          book_id INTEGER NOT NULL REFERENCES books(id),
-          author_id INTEGER NOT NULL REFERENCES authors(id),
-          PRIMARY KEY (book_id, author_id)
-        )
-      `)
-      db.exec(`
-        CREATE TABLE book_genres (
-          book_id INTEGER NOT NULL REFERENCES books(id),
-          genre_id INTEGER NOT NULL REFERENCES genres(id),
-          PRIMARY KEY (book_id, genre_id)
-        )
-      `)
+      db.exec('DELETE FROM books_fts')
 
-      _createFtsTable(db)
-
-      db.exec("UPDATE import_status SET status='pending', total_books=0, imported_at=NULL WHERE id=1")
-    })()
+      tx.update(schema.importStatus)
+        .set({
+          status: 'pending',
+          totalBooks: 0,
+          importedAt: null
+        })
+        .where(eq(schema.importStatus.id, 1))
+        .run()
+    })
   } finally {
     db.pragma('foreign_keys = ON')
   }

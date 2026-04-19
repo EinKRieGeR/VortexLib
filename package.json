@@ -21,6 +21,7 @@
     "drizzle-orm": "^0.45.2",
     "iconv-lite": "^0.7.2",
     "nuxt": "^4.4.2",
+    "nuxt-auth-utils": "^0.5.29",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4",
     "yauzl": "^3.3.0"

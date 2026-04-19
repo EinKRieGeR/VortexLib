@@ -68,11 +68,8 @@
 const searchQuery = ref('')
 const router = useRouter()
 const route = useRoute()
-const { user, isLoaded, fetchUser, logout } = useAuth()
 
-onMounted(() => {
-  fetchUser()
-})
+const { user, isLoaded, logout } = useAuth()
 
 async function doLogout() {
   await logout()

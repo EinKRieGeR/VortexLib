@@ -37,7 +37,7 @@ const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
-const { fetchUser } = useAuth()
+const { user, fetchUser } = useAuth()
 const router = useRouter()
 
 async function submit() {
@@ -45,14 +45,22 @@ async function submit() {
   loading.value = true
   try {
     const endpoint = isRegister.value ? '/api/auth/register' : '/api/auth/login'
+    
     await $fetch(endpoint, {
       method: 'POST',
       body: { username: username.value, password: password.value }
     })
+    
     await fetchUser()
-    router.push('/')
+    
+    if (user.value) {
+      router.push('/')
+    } else {
+      error.value = 'Ошибка синхронизации сессии'
+    }
   } catch (err: any) {
-    error.value = err.data?.message || 'Произошла ошибка'
+    console.error('Login error:', err)
+    error.value = err.data?.message || err.message || 'Произошла ошибка'
   } finally {
     loading.value = false
   }

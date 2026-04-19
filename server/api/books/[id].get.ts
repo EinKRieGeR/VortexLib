@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
 
-  const book = db.prepare('SELECT * FROM books WHERE id = ?').get(id) as any
+  const book = db.prepare('SELECT * FROM books WHERE id = ? AND deleted = 0').get(id) as any
   if (!book) {
     throw createError({ statusCode: 404, statusMessage: 'Book not found' })
   }

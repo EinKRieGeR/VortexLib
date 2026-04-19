@@ -4,14 +4,17 @@ import { eq } from 'drizzle-orm'
 import { requireRole } from '../utils/auth'
 
 export default defineEventHandler(async (event) => {
-  requireRole(event, ['admin'])
+  await requireRole(event, ['admin'])
   const body = await readBody(event)
   const db = getDrizzle()
   
   if (body.libraryPath !== undefined) {
-    await db.update(appSettings)
-      .set({ libraryPath: body.libraryPath })
-      .where(eq(appSettings.id, 1))
+    await db.insert(appSettings)
+      .values({ id: 1, libraryPath: body.libraryPath })
+      .onConflictDoUpdate({
+        target: appSettings.id,
+        set: { libraryPath: body.libraryPath }
+      })
   }
   
   return { success: true }

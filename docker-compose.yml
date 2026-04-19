@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  vortexlib:
+    build: .
+    container_name: vortexlib
+    ports:
+      - "4224:4224"
+    environment:
+      NUXT_DB_PATH: /app/data/library.db
+      NUXT_LIBRARY_PATH: /library
+      NUXT_SESSION_PASSWORD: DFShv8*fe542gdUkgrepvUsUP-vbfdnsVV36@46sdfvt
+      NODE_ENV: production
+      DOCKERIZED: "true"
+    volumes:
+      - vortexlib_data:/app/data
+      # CHANGE THE HOST PATH TO YOUR ACTUAL LIBRARY PATH
+      - /path/to/your/books:/library:ro
+    restart: unless-stopped
+
+volumes:
+  vortexlib_data:

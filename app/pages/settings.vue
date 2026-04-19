@@ -50,13 +50,17 @@
                 type="text" 
                 v-model="libraryPath" 
                 class="input" 
+                :disabled="isDocker"
                 placeholder="/path/to/library"
               />
-              <button class="btn btn-primary" @click="saveSettings" :disabled="savingSettings">
+              <button v-if="!isDocker" class="btn btn-primary" @click="saveSettings" :disabled="savingSettings">
                 {{ savingSettings ? '...' : 'Сохранить' }}
               </button>
             </div>
-            <p class="helper-text">Укажите основной путь. VortexLib найдет все .inpx файлы рекурсивно.</p>
+            <p v-if="isDocker" class="helper-text docker-hint">
+              🚀 <strong>VortexLib запущен в Docker.</strong> Библиотека примонтирована к <code>/library</code>. Для смены папок измените <code>docker-compose.yml</code>.
+            </p>
+            <p v-else class="helper-text">Укажите основной путь. VortexLib найдет все .inpx файлы рекурсивно.</p>
           </div>
 
           <div class="card section-card">
@@ -203,7 +207,6 @@
             <label>Роль</label>
             <select class="select" v-model="userForm.role">
               <option value="user">Пользователь (Чтение)</option>
-              <option value="moderator">Модератор (Управление книгами)</option>
               <option value="admin">Администратор (Полный доступ)</option>
             </select>
           </div>
@@ -218,10 +221,13 @@
 </template>
 
 <script setup lang="ts">
+definePageMeta({
+  middleware: 'admin'
+})
+
 const { user } = useAuth()
-if (import.meta.client && (!user.value || user.value.role !== 'admin')) {
-  useRouter().push('/')
-}
+const config = useRuntimeConfig()
+const isDocker = computed(() => config.public.isDocker)
 
 const activeTab = ref('library')
 const tabs = [
